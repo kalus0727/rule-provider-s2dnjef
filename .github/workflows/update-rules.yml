@@ -1,0 +1,44 @@
+name: Auto Convert Rules
+
+on:
+  schedule:
+    # UTC 20:00 (Japan 05:00)
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download latest Mihomo Alpha
+        run: |
+          echo "Downloading latest Mihomo Alpha..."
+          DOWNLOAD_URL=$(curl -s https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/Prerelease-Alpha | jq -r '.assets[].browser_download_url' | grep -E 'linux-amd64-alpha-[a-z0-9]+\.gz' | head -n 1)
+          wget -qO mihomo.gz "$DOWNLOAD_URL"
+          gunzip mihomo.gz
+          chmod +x mihomo
+
+      - name: Download and Convert Rules
+        run: |
+          echo "Starting download raw file..."
+          wget -qO reject.txt https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/reject.txt
+          
+          echo "Starting convert..."
+          ./mihomo convert-ruleset domain yaml reject.txt reject.tmp.mrs
+          mv reject.tmp.mrs reject.mrs
+          echo "Finining convert"
+
+      - name: Force Push to Release Branch
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          git checkout --orphan release
+          git add reject.mrs
+          git commit -m "Auto Update: $(date +'%Y-%m-%d %H:%M:%S')"
+          
+          git push -f origin release
