@@ -22,7 +22,7 @@ jobs:
           gunzip mihomo.gz
           chmod +x mihomo
 
-      - name: Download and Convert Rules
+      - name: Download and Convert Domain Rules (Reject)
         run: |
           echo "Starting download raw file..."
           wget -qO reject.txt https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/reject.txt
@@ -30,7 +30,25 @@ jobs:
           echo "Starting convert..."
           ./mihomo convert-ruleset domain yaml reject.txt reject.tmp.mrs
           mv reject.tmp.mrs reject.mrs
-          echo "Finining convert"
+          echo "Finished convert reject.mrs"
+
+      - name: Download and Convert IP Rules (FireHOL Level 1)
+        run: |
+          echo "Starting download firehol_level1.netset..."
+          wget -qO firehol_level1.netset https://iplists.firehol.org/files/firehol_level1.netset
+          
+          echo "Parsing to YAML format..."
+          # 1. 写入开头 payload:
+          echo "payload:" > firehol_level1.yaml
+          # 2. 过滤掉 # 开头的注释和空行
+          # 3. 使用 awk 在每行 IP 前加上 "  - '" 并以 "'" 结尾，拼装成标准 yaml 数组格式
+          grep -vE "^#|^$" firehol_level1.netset | awk '{print "  - \047" $1 "\047"}' >> firehol_level1.yaml
+          
+          echo "Starting convert to MRS..."
+          # 注意：这里的类型是 ipcidr，格式是 yaml
+          ./mihomo convert-ruleset ipcidr yaml firehol_level1.yaml firehol_level1.tmp.mrs
+          mv firehol_level1.tmp.mrs firehol_level1.mrs
+          echo "Finished convert firehol_level1.mrs"
 
       - name: Force Push to Release Branch
         run: |
@@ -38,7 +56,8 @@ jobs:
           git config --local user.name "github-actions[bot]"
           
           git checkout --orphan release
-          git add reject.mrs
+          # 确保同时提交新生成的 mrs 文件
+          git add reject.mrs firehol_level1.mrs
           git commit -m "Auto Update: $(date +'%Y-%m-%d %H:%M:%S')"
           
           git push -f origin release
